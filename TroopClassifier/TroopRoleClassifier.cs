@@ -30,6 +30,7 @@ namespace TroopClassifier
     public static class TroopRoleClassifier
     {
         private const string JavelinUsage = "Javelin";
+        private const string JavelinAlternativeUsage = "OneHandedPolearm_JavelinAlternative";
         private const string ThrownPolearmUsage = "TwoHandedPolearm_Thrown";
 
         public static TroopRole Classify(Agent? agent)
@@ -37,7 +38,10 @@ namespace TroopClassifier
             if (agent == null)
                 return TroopRole.LightInfantry;
 
-            return Classify(agent.HasMount, slot => agent.SpawnEquipment[slot].Item);
+            Loadout loadout = Inspect(slot => agent.SpawnEquipment[slot].Item);
+            TroopRole role = Classify(agent.HasMount, loadout);
+            TroopClassifierLogger.Log(agent, role, loadout);
+            return role;
         }
 
         public static TroopRole Classify(BasicCharacterObject? troop)
@@ -55,12 +59,12 @@ namespace TroopClassifier
                         continue;
 
                     yieldedAny = true;
-                    roles.Add(Classify(troop.IsMounted, slot => equipment[slot].Item));
+                    roles.Add(Classify(troop.IsMounted, Inspect(slot => equipment[slot].Item)));
                 }
             }
 
             if (!yieldedAny && troop.Equipment != null)
-                roles.Add(Classify(troop.IsMounted, slot => troop.Equipment[slot].Item));
+                roles.Add(Classify(troop.IsMounted, Inspect(slot => troop.Equipment[slot].Item)));
 
             if (roles.Count == 0)
                 return TroopRole.LightInfantry;
@@ -86,13 +90,14 @@ namespace TroopClassifier
             return best;
         }
 
-        private static TroopRole Classify(bool isMounted, Func<int, ItemObject?> getItem)
+        private static TroopRole Classify(bool isMounted, Loadout loadout)
         {
-            Loadout loadout = Inspect(getItem);
             if (isMounted)
-                return loadout.HasBow || loadout.HasCrossbow ? TroopRole.HorseArcher : TroopRole.MeleeCavalry;
+                return loadout.HasBow || loadout.HasCrossbow || loadout.HasSling
+                    ? TroopRole.HorseArcher
+                    : TroopRole.MeleeCavalry;
 
-            if (loadout.HasBow) return TroopRole.FootArcher;
+            if (loadout.HasBow || loadout.HasSling) return TroopRole.FootArcher;
             if (loadout.HasCrossbow) return TroopRole.Crossbowman;
             if (loadout.HasPike) return TroopRole.PikeInfantry;
             if (loadout.HasLargeSwingable) return TroopRole.ShockInfantry;
@@ -118,27 +123,50 @@ namespace TroopClassifier
                 loadout.OccupiedWeaponSlots++;
                 string itemId = item.StringId ?? string.Empty;
                 string itemName = item.Name?.ToString() ?? string.Empty;
-                bool hasNormalJavelinUsage = false;
+                loadout.WeaponItemIds.Add(itemId);
                 foreach (WeaponComponentData weapon in item.Weapons)
                 {
                     if (weapon.IsShield) loadout.HasShield = true;
                     if (weapon.WeaponClass == WeaponClass.Bow) loadout.HasBow = true;
                     if (weapon.WeaponClass == WeaponClass.Crossbow) loadout.HasCrossbow = true;
-                    if (IsNormalJavelin(weapon)) hasNormalJavelinUsage = true;
+                    if (weapon.WeaponClass == WeaponClass.Sling) loadout.HasSling = true;
                     if (IsPike(itemId, itemName, weapon)) loadout.HasPike = true;
                     if (IsLargeSwingable(weapon)) loadout.HasLargeSwingable = true;
                 }
 
-                if (hasNormalJavelinUsage)
+                if (IsJavelin(item))
                     loadout.JavelinStacks++;
             }
 
             return loadout;
         }
 
-        private static bool IsNormalJavelin(WeaponComponentData weapon)
-            => weapon.WeaponClass == WeaponClass.Javelin &&
-               string.Equals(weapon.ItemUsage, JavelinUsage, StringComparison.OrdinalIgnoreCase);
+        /// <summary>
+        /// Identifies a normal javelin item stack, including generated items whose
+        /// runtime primary usage is the one-handed alternative. A Pilum is still
+        /// excluded because its item exposes the thrown-polearm usage.
+        /// </summary>
+        private static bool IsJavelin(ItemObject item)
+        {
+            bool hasNormalJavelinUsage = false;
+            foreach (WeaponComponentData weapon in item.Weapons)
+            {
+                if (string.Equals(weapon.ItemUsage, ThrownPolearmUsage, StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                if (string.Equals(weapon.ItemUsage, JavelinUsage, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(weapon.ItemUsage, JavelinAlternativeUsage, StringComparison.OrdinalIgnoreCase))
+                    hasNormalJavelinUsage = true;
+            }
+
+            if (hasNormalJavelinUsage)
+                return true;
+
+            // Bannerlord's crafted javelins can expose no usable description in
+            // ItemObject.Weapons. Their generated IDs remain stable and do not
+            // overlap Pilum/throwable-polearm IDs.
+            return (item.StringId?.IndexOf("javelin", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0;
+        }
 
         private static bool IsPike(string itemId, string itemName, WeaponComponentData weapon)
             => weapon.IsPolearm &&
@@ -179,11 +207,98 @@ namespace TroopClassifier
         {
             public bool HasBow { get; set; }
             public bool HasCrossbow { get; set; }
+            public bool HasSling { get; set; }
             public bool HasShield { get; set; }
             public bool HasPike { get; set; }
             public bool HasLargeSwingable { get; set; }
             public int JavelinStacks { get; set; }
             public int OccupiedWeaponSlots { get; set; }
+            public List<string> WeaponItemIds { get; } = new List<string>();
+
+            public string Describe()
+                => string.Join(", ", WeaponItemIds);
         }
+
+        private static class TroopClassifierLogger
+        {
+            private static readonly object Sync = new object();
+            private static readonly HashSet<string> LoggedLoadouts = new HashSet<string>(StringComparer.Ordinal);
+            private static Mission? _mission;
+            private static string? _logPath;
+
+            public static void Log(Agent agent, TroopRole role, Loadout loadout)
+            {
+                try
+                {
+                    string troopId = agent.Character?.StringId ?? "unknown";
+                    string troopName = agent.Character?.Name?.ToString() ?? troopId;
+                    string weaponKit = loadout.Describe();
+                    string key = string.Concat(troopId, "|", agent.HasMount, "|", weaponKit);
+
+                    lock (Sync)
+                    {
+                        if (!ReferenceEquals(_mission, agent.Mission))
+                        {
+                            _mission = agent.Mission;
+                            LoggedLoadouts.Clear();
+                            Append($"--- New mission: {agent.Mission?.GetType().Name ?? "unknown"} ---");
+                        }
+
+                        if (!LoggedLoadouts.Add(key))
+                            return;
+
+                        Append($"{troopId} ({troopName}) -> {role} | mounted={agent.HasMount} | " +
+                               $"javelinStacks={loadout.JavelinStacks}, shield={loadout.HasShield}, " +
+                               $"pike={loadout.HasPike}, swingable={loadout.HasLargeSwingable}, sling={loadout.HasSling} | weapons=[{weaponKit}]");
+                    }
+                }
+                catch
+                {
+                    // Diagnostics must never interfere with a mission.
+                }
+            }
+
+            public static void Reset()
+            {
+                lock (Sync)
+                {
+                    _mission = null;
+                    LoggedLoadouts.Clear();
+                    _logPath = null;
+                    try
+                    {
+                        string path = GetLogPath();
+                        if (System.IO.File.Exists(path))
+                            System.IO.File.Delete(path);
+                    }
+                    catch
+                    {
+                        // Diagnostics must never interfere with module loading.
+                    }
+                }
+            }
+
+            private static void Append(string message)
+            {
+                System.IO.File.AppendAllText(
+                    GetLogPath(),
+                    $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}");
+            }
+
+            private static string GetLogPath()
+            {
+                if (!string.IsNullOrEmpty(_logPath))
+                    return _logPath!;
+
+                string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                string directory = System.IO.Path.Combine(documents, "Mount and Blade II Bannerlord", "Configs");
+                System.IO.Directory.CreateDirectory(directory);
+                _logPath = System.IO.Path.Combine(directory, "TroopClassifier_Log.txt");
+                return _logPath!;
+            }
+        }
+
+        internal static void ResetLog()
+            => TroopClassifierLogger.Reset();
     }
 }

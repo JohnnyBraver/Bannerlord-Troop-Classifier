@@ -8,5 +8,10 @@ namespace TroopClassifier
     /// </summary>
     public sealed class SubModule : MBSubModuleBase
     {
+        protected override void OnSubModuleLoad()
+        {
+            base.OnSubModuleLoad();
+            TroopRoleClassifier.ResetLog();
+        }
     }
 }
