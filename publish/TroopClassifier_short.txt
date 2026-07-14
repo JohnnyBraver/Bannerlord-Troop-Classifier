@@ -1,0 +1,1 @@
+Shared equipment-based tactical roles for Bannerlord mods. Required by compatible mods; it has no settings or gameplay changes by itself.

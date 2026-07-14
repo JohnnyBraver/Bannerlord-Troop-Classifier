@@ -1,0 +1,16 @@
+[size=4][b]Description[/b][/size]
+[size=3][color=#D4D4D8]Troop Classifier is a small shared dependency for Bannerlord mods that need consistent tactical troop roles. It does not add settings, buttons, or gameplay behaviour by itself. Compatible mods use it to make their own decisions from the same equipment rules.[/color][/size]
+
+[size=4][b]What it classifies[/b][/size]
+[size=3][color=#D4D4D8]- Light Infantry
+- Shield Infantry
+- Shock Infantry
+- Skirmisher
+- Pike Infantry
+- Foot Archer and Crossbowman
+- Melee Cavalry and Horse Archer
+
+Roles are based on actual battle equipment. For example, a two-handed troop can be Shock Infantry while another roll of the same troop type is Light Infantry. Ordinary javelins are distinguished from Pilum and other throwable polearms.[/color][/size]
+
+[size=4][b]Installation[/b][/size]
+[size=3][color=#D4D4D8]Install this module into Bannerlord's Modules folder and enable it before any compatible mods in the launcher. It is required by Formation Manager v0.5.0 and later.[/color][/size]
