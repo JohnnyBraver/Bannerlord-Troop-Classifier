@@ -20,7 +20,9 @@ namespace TroopClassifier
         Crossbowman,
         MeleeCavalry,
         HorseArcher,
-        PikeInfantry
+        PikeInfantry,
+        SpearInfantry,
+        MountedSkirmisher
     }
 
     /// <summary>
@@ -93,9 +95,15 @@ namespace TroopClassifier
         private static TroopRole Classify(bool isMounted, Loadout loadout)
         {
             if (isMounted)
-                return loadout.HasBow || loadout.HasCrossbow || loadout.HasSling
-                    ? TroopRole.HorseArcher
-                    : TroopRole.MeleeCavalry;
+            {
+                if (loadout.HasBow || loadout.HasCrossbow || loadout.HasSling)
+                    return TroopRole.HorseArcher;
+
+                if (loadout.HasThrowing)
+                    return TroopRole.MountedSkirmisher;
+
+                return TroopRole.MeleeCavalry;
+            }
 
             if (loadout.HasBow || loadout.HasSling) return TroopRole.FootArcher;
             if (loadout.HasCrossbow) return TroopRole.Crossbowman;
@@ -107,6 +115,8 @@ namespace TroopClassifier
             if (loadout.JavelinStacks >= 2 ||
                 (loadout.JavelinStacks == 1 && (!loadout.HasShield || loadout.OccupiedWeaponSlots <= 3)))
                 return TroopRole.Skirmisher;
+
+            if (loadout.HasShield && loadout.HasSpear) return TroopRole.SpearInfantry;
 
             return loadout.HasShield ? TroopRole.ShieldInfantry : TroopRole.LightInfantry;
         }
@@ -132,6 +142,9 @@ namespace TroopClassifier
                     if (weapon.WeaponClass == WeaponClass.Sling) loadout.HasSling = true;
                     if (IsPike(itemId, itemName, weapon)) loadout.HasPike = true;
                     if (IsLargeSwingable(weapon)) loadout.HasLargeSwingable = true;
+                    if (IsSpear(itemId, itemName, weapon)) loadout.HasSpear = true;
+                    if (weapon.IsRangedWeapon && weapon.WeaponClass != WeaponClass.Bow && weapon.WeaponClass != WeaponClass.Crossbow && weapon.WeaponClass != WeaponClass.Sling)
+                        loadout.HasThrowing = true;
                 }
 
                 if (IsJavelin(item))
@@ -140,6 +153,11 @@ namespace TroopClassifier
 
             return loadout;
         }
+
+        private static bool IsSpear(string itemId, string itemName, WeaponComponentData weapon)
+            => weapon.IsPolearm &&
+               !IsPike(itemId, itemName, weapon) &&
+               !string.Equals(weapon.ItemUsage, ThrownPolearmUsage, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Identifies a normal javelin item stack, including generated items whose
@@ -191,13 +209,15 @@ namespace TroopClassifier
         {
             switch (role)
             {
-                case TroopRole.HorseArcher: return 9;
-                case TroopRole.MeleeCavalry: return 8;
-                case TroopRole.FootArcher: return 7;
-                case TroopRole.Crossbowman: return 6;
-                case TroopRole.PikeInfantry: return 5;
-                case TroopRole.ShockInfantry: return 4;
-                case TroopRole.Skirmisher: return 3;
+                case TroopRole.HorseArcher: return 11;
+                case TroopRole.MountedSkirmisher: return 10;
+                case TroopRole.MeleeCavalry: return 9;
+                case TroopRole.FootArcher: return 8;
+                case TroopRole.Crossbowman: return 7;
+                case TroopRole.PikeInfantry: return 6;
+                case TroopRole.ShockInfantry: return 5;
+                case TroopRole.Skirmisher: return 4;
+                case TroopRole.SpearInfantry: return 3;
                 case TroopRole.ShieldInfantry: return 2;
                 default: return 1;
             }
@@ -211,6 +231,8 @@ namespace TroopClassifier
             public bool HasShield { get; set; }
             public bool HasPike { get; set; }
             public bool HasLargeSwingable { get; set; }
+            public bool HasSpear { get; set; }
+            public bool HasThrowing { get; set; }
             public int JavelinStacks { get; set; }
             public int OccupiedWeaponSlots { get; set; }
             public List<string> WeaponItemIds { get; } = new List<string>();

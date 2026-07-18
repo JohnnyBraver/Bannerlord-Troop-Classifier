@@ -1,5 +1,12 @@
 # Changelog - Troop Classifier
 
+## [v0.2.0] - 2026-07-18
+
+### Added
+- **Spear Infantry Role**: Foot troops equipped with a shield and a spear (melee polearm that is not a pike, javelin, or pilum) are now classified under `SpearInfantry` instead of generic `ShieldInfantry`.
+- **Mounted Skirmisher Role**: Mounted troops equipped with throwing weapons but no bows/crossbows/slings are now classified under `MountedSkirmisher` instead of generic `MeleeCavalry`.
+- **Priority Tie-Breakers**: Updated role priority ratings to favor specialized roles (`MountedSkirmisher` and `SpearInfantry`) over general ones when a troop template contains multiple loadout configurations.
+
 ## [v0.1.1] - 2026-07-14
 
 ### Added

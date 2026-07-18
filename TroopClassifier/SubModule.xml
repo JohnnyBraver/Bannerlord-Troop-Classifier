@@ -2,7 +2,7 @@
 <Module>
   <Name value="Troop Classifier" />
   <Id value="TroopClassifier" />
-  <Version value="v0.1.1" />
+  <Version value="v0.2.0" />
   <SingleplayerModule value="true" />
   <DependedModules>
     <DependedModule Id="Native" DependentVersion="v1.4.6" />
