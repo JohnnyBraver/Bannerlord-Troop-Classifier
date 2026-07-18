@@ -46,6 +46,8 @@ namespace TroopClassifier
             return role;
         }
 
+        // TODO: Expose a method to get all possible roles for a character's equipment sets (e.g. IEnumerable<TroopRole> ClassifyAll(BasicCharacterObject troop)),
+        // or support a parameter/mode for classification (e.g., strict matching where any loadout outside allowed set rejects recruitment).
         public static TroopRole Classify(BasicCharacterObject? troop)
         {
             if (troop == null)
